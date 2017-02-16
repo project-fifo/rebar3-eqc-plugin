@@ -94,7 +94,7 @@ coloured_output(".", []) ->
 coloured_output("x", []) ->
     cf:print("~!y*");
 coloured_output("Failed! ", []) ->
-    cf:print("~!rFailed! ~!!");
+    cf:print("~!rFailed! ~!!(╯°□°）╯︵ ┻━┻ ");
 coloured_output(S, F) ->
     io:format(S, F).
 
