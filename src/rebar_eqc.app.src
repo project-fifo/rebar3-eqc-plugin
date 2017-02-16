@@ -1,0 +1,12 @@
+{application, rebar_eqc, [
+  {description, "Plugin to run EQC properties"},
+  {vsn, "0.0.11"},
+  {registered, []},
+  {applications, [kernel, stdlib, cf]},
+  {env, []},
+  {pkg_name,"rebar_eqc"},
+  {maintainers, ["Kelly McLaughlin", "Heinz N. Gies"]},
+  {licenses, ["Apache"]},
+  {links, [{"Github", "https://github.com/project-fifo/rebar3-eqc-plugin"},
+           {"Github (upstream)", "https://github.com/kellymclaughlin/rebar3-eqc-plugin"}]}
+]}.
