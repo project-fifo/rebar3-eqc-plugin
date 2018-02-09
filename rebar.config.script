@@ -2,9 +2,6 @@ case code:which(eqc) of
     non_existing ->
         CONFIG;
     _ ->
-        io:format(user, "EQC found~n", []),
         OldErlOpts = proplists:get_value(erl_opts, CONFIG, []),
-        NC = lists:keystore(erl_opts, 1, CONFIG, {erl_opts, [{d, 'EQC'}]}),
-        io:format(user, "~p~n", [NC]),
-        NC
+        lists:keystore(erl_opts, 1, CONFIG, {erl_opts, [{d, 'EQC'}]})
 end.
