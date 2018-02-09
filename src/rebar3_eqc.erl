@@ -2,14 +2,15 @@
 %% ex: ts=4 sw=4 et
 
 -module(rebar3_eqc).
+-ifdef(EQC).
+
+-include_lib("eqc/include/eqc.hrl").
 
 -behaviour(provider).
 
 -export([init/1,
          do/1,
          format_error/1]).
-
--include_lib("eqc/include/eqc.hrl").
 
 -define(PROVIDER, eqc).
 -define(DEPS, [compile]).
@@ -610,3 +611,5 @@ check_epmd({ok, _}) ->
 check_epmd({error, Reason}) ->
     rebar_utils:abort("Erlang Distribution failed: ~p. "
                       "Verify that epmd is running and try again.", [Reason]).
+
+-endif.
