@@ -1,7 +1,7 @@
 %% -*- erlang-indent-level: 4;indent-tabs-mode: nil -*-
 %% ex: ts=4 sw=4 et
 
--module(rebar3_eqc).
+-module(rebar_eqc).
 -ifdef(EQC).
 
 -include_lib("eqc/include/eqc.hrl").
