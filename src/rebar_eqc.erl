@@ -1,15 +1,16 @@
 %% -*- erlang-indent-level: 4;indent-tabs-mode: nil -*-
 %% ex: ts=4 sw=4 et
 
--module(rebar_eqc).
+-module(rebar3_eqc).
+-ifdef(EQC).
+
+-include_lib("eqc/include/eqc.hrl").
 
 -behaviour(provider).
 
 -export([init/1,
          do/1,
          format_error/1]).
-
--include_lib("eqc/include/eqc.hrl").
 
 -define(PROVIDER, eqc).
 -define(DEPS, [compile]).
@@ -62,8 +63,6 @@ do_tests(State, EqcOpts, _Tests) ->
     {EqcFun, TestQuantity} = numtests_or_testing_time(EqcOpts),
     CounterExMode = lists:member({counterexample, true}, EqcOpts),
 
-    ok = rebar_prv_cover:maybe_write_coverdata(State, ?PROVIDER),
-
     ProjectApps = project_apps(State),
     AllPropsRaw = properties(app_modules(app_names(ProjectApps), []) ++
                                  test_modules(ProjectApps,
@@ -86,6 +85,7 @@ do_tests(State, EqcOpts, _Tests) ->
         {error, Reason} ->
             ?PRV_ERROR(Reason);
         ok ->
+            ok = rebar_prv_cover:maybe_write_coverdata(State, ?PROVIDER),
             {ok, State}
     end.
 
@@ -611,3 +611,5 @@ check_epmd({ok, _}) ->
 check_epmd({error, Reason}) ->
     rebar_utils:abort("Erlang Distribution failed: ~p. "
                       "Verify that epmd is running and try again.", [Reason]).
+
+-endif.
