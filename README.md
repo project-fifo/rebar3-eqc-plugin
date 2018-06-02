@@ -116,3 +116,7 @@ name use the following:
 ```
 ./rebar3 as eqc eqc -n 1000 -p prop_test1
 ```
+
+## Chnages
+
+0.2.0 - `{d, 'EQC'}` is no longer automatically added
