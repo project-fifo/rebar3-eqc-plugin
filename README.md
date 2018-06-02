@@ -119,4 +119,4 @@ name use the following:
 
 ## Chnages
 
-0.2.0 - `{d, 'EQC'}` is no longer automatically added
+0.1.0 - `{d, 'EQC'}` is no longer automatically added
