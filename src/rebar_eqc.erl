@@ -254,38 +254,21 @@ prepare_tests(State, EqcOpts) ->
 resolve_apps(State, RawOpts) ->
     compile_tests(State, project_apps(State), all, RawOpts).
 
-copy_and_compile_test_dirs(State, Opts) ->
-    copy_and_compile_test_dirs(State, Opts, proplists:get_value(dir, Opts)).
-
-copy_and_compile_test_dirs(_State, Opts, undefined) ->
-    {error, {no_tests_specified, Opts}};
-copy_and_compile_test_dirs(State, Opts, Dir) when is_list(Dir),
-                                                  is_integer(hd(Dir)) ->
-    %% dir is a single directory
-    ok = filelib:ensure_dir(filename:join(Dir, "dummy")),
-    NewPath = copy(State, Dir),
-    [{dir, compile_dir(State, NewPath)}|lists:keydelete(dir, 1, Opts)];
-copy_and_compile_test_dirs(State, Opts, Dirs) when is_list(Dirs) ->
-    %% dir is a list of directories
-    MapFun = fun(Dir) ->
-                 ok = filelib:ensure_dir(filename:join(Dir, "dummy")),
-                 NewPath = copy(State, Dir),
-                 compile_dir(State, NewPath)
-             end,
-    NewDirs = lists:map(MapFun, Dirs),
-    [{dir, NewDirs} | lists:keydelete(dir, 1, Opts)].
-
 compile_tests(State, TestApps, Suites, RawOpts) ->
-    copy_and_compile_test_dirs(State, RawOpts),
     F = fun(AppInfo) ->
                 NewState = replace_src_dirs(State, ["eqc"]),
                 TopAppsPaths = app_paths(NewState),
                 rebar_utils:update_code(rebar_state:code_paths(NewState, all_deps)
                                         -- TopAppsPaths, [soft_purge]),
                 code:add_patha(TopAppsPaths),
-                ok = rebar_erlc_compiler:compile(rebar_state:opts(NewState),
-                                                 rebar_app_info:dir(AppInfo),
-                                                 ec_cnv:to_list(rebar_app_info:out_dir(AppInfo)))
+                %% For each of the project apps we compile the content of eqc
+                %% into ebin.
+                Src = filename:join(rebar_app_info:dir(AppInfo), "eqc"),
+                Dest = filename:join(ec_cnv:to_list(rebar_app_info:out_dir(AppInfo)), "ebin"),
+                ok = compile(NewState,
+                             rebar_app_info:name(AppInfo),
+                             Src,
+                             Dest)
         end,
     lists:foreach(F, TestApps),
     rebar_utils:update_code(rebar_state:code_paths(State, all_deps), [soft_purge]),
@@ -297,34 +280,43 @@ compile_tests(State, TestApps, Suites, RawOpts) ->
 
     {ok, test_set(TestApps, Suites)}.
 
+
+%% Compiles the source with the right opt, this way we keep defines or other
+%% things set by hooks.
+compile(State, AppName, Src, Out) ->
+    Opts = case AppName of
+               <<"root">> -> rebar_state:opts(State);
+               _ -> rebar_app_info:opts(find_app(AppName, State))
+           end,
+    rebar_api:debug("Compiling files in ~s to ~s", [Src, Out]),
+    NewOpts = lists:foldl(fun({K, V}, Dict) -> rebar_opts:set(Dict, K, V) end,
+                          Opts,
+                          [{src_dirs, ["."]}]),
+    IncludeOpts = add_includes(NewOpts, State),
+    rebar_erlc_compiler:compile(IncludeOpts, Src, ec_cnv:to_list(Out)).
+
+find_app(AppName, State) ->
+    [App] = [App || App <- rebar_state:project_apps(State),
+                    rebar_app_info:name(App) =:= AppName],
+    App.
+
+add_includes(NewOpts, State) ->
+    Includes = lists:flatmap(fun app_includes/1, rebar_state:project_apps(State)),
+    dict:append_list(erl_opts, Includes, NewOpts).
+
+app_includes(App) ->
+    Opts = rebar_app_info:opts(App),
+    Dir = rebar_app_info:dir(App),
+    [{i, filename:join(Dir, Src)} || Src <- rebar_dir:all_src_dirs(Opts, ["src"], [])]
+        ++
+        [{i, filename:join(Dir, "include")},
+         {i, Dir}]. % not sure for that one, but mimics the rebar3_erlc_compiler
+
+
 app_paths(State) ->
     Apps = rebar_state:project_apps(State),
     [rebar_app_info:ebin_dir(App) || App <- Apps,
                                      not rebar_app_info:is_checkout(App)].
-
-
-copy(State, Target) ->
-    case retarget_path(State, Target) of
-        %% directory lies outside of our project's file structure so
-        %%  don't copy it
-        Target    -> Target;
-        NewTarget ->
-            %% unlink the directory if it's a symlink
-            case ec_file:is_symlink(NewTarget) of
-                true  -> ok = ec_file:remove(NewTarget);
-                false -> ok
-            end,
-            ok = ec_file:copy(Target, NewTarget, [recursive]),
-            NewTarget
-    end.
-
-compile_dir(State, Dir) ->
-    NewState = replace_src_dirs(State, [Dir]),
-    ok = rebar_erlc_compiler:compile(rebar_state:opts(NewState),
-                                     rebar_dir:base_dir(State),
-                                     filename:join(Dir, "../ebin")),
-    ok = maybe_cover_compile(State, Dir),
-    Dir.
 
 maybe_cover_compile(State, Opts) ->
     State1 = case proplists:get_value(cover, Opts, false) of
@@ -553,44 +545,6 @@ help(counterexample) -> "Set counterexample mode. A counterexample is used to "
                             "available. If no counterexample exists for a "
                             "property that is part of a counterexample mode "
                             "test run that property is skipped.".
-
-retarget_path(State, Path) ->
-    ProjectApps = rebar_state:project_apps(State),
-    retarget_path(State, Path, ProjectApps).
-
-%% not relative to any apps in project, check to see it's relative to
-%%  project root
-retarget_path(State, Path, []) ->
-    case relative_path(reduce_path(Path), rebar_state:dir(State)) of
-        {ok, NewPath}         -> filename:join([rebar_dir:base_dir(State), NewPath]);
-        %% not relative to project root, don't modify
-        {error, not_relative} -> Path
-    end;
-%% relative to current app, retarget to the same dir relative to
-%%  the app's out_dir
-retarget_path(State, Path, [App|Rest]) ->
-    case relative_path(reduce_path(Path), rebar_app_info:dir(App)) of
-        {ok, NewPath}         -> filename:join([rebar_app_info:out_dir(App), NewPath]);
-        {error, not_relative} -> retarget_path(State, Path, Rest)
-    end.
-
-relative_path(Target, To) ->
-    relative_path1(filename:split(filename:absname(Target)),
-                   filename:split(filename:absname(To))).
-
-relative_path1([Part|Target], [Part|To]) -> relative_path1(Target, To);
-relative_path1([], [])                   -> {ok, ""};
-relative_path1(Target, [])               -> {ok, filename:join(Target)};
-relative_path1(_, _)                     -> {error, not_relative}.
-
-reduce_path(Dir) -> reduce_path([], filename:split(filename:absname(Dir))).
-
-reduce_path([], [])                -> filename:nativename("/");
-reduce_path(Acc, [])               -> filename:join(lists:reverse(Acc));
-reduce_path(Acc, ["."|Rest])       -> reduce_path(Acc, Rest);
-reduce_path([_|Acc], [".."|Rest])  -> reduce_path(Acc, Rest);
-reduce_path([], [".."|Rest])       -> reduce_path([], Rest);
-reduce_path(Acc, [Component|Rest]) -> reduce_path([Component|Acc], Rest).
 
 -spec setup_name(rebar_state:t()) -> ok.
 setup_name(State) ->

@@ -40,24 +40,25 @@ name in different modules. The `--properties` option may also be used
 with counterexample mode to recheck a specific property or set of
 properties.
 
+(forked from: https://github.com/kellymclaughlin/rebar3-eqc-plugin)
+
 ## Installation
 
 To install the plugin using the Hex package manaage, add the following
 to the rebar.config file:
 
 ```
-{plugins, [rebar3_eqc]}
+{profiles,
+ [
+  {eqc, [{erl_opts, [nowarn_export_all]}, {plugins, [rebar_eqc]}]}
+ ]}
 ```
 
-Alternatively, to install the plugin from github use the following:
-
-
-```
-{plugins, [
-    {rebar3_eqc, ".*", {git, "https://github.com/kellymclaughlin/rebar3-eqc-plugin.git", {tag, "0.0.10"}}}
-]}.
-
-```
+EQC files are saved in `./eqc` of the app and will not be compiled unless
+you run EQC. This means you do not need to encappsulate them in `-ifdef`
+if however you want to include EQC tets in your normal source files you
+might want to include `{d, 'EQC'}` and `{d, 'TEST}` in the `erl_opts` of
+the profile.
 
 To set the number of test executions to 500 instead of the default of
 100, add the following rebar.config entry:
@@ -85,33 +86,33 @@ Execute each property the configured number of times or for the
 configured duration:
 
 ```
-./rebar3 eqc
+./rebar3 as eqc eqc
 ```
 
 Override the configuration in `rebar.config` or the default and
 execute each property 10 times:
 
 ```
-./rebar3 eqc -n 10
+./rebar3 as eqc eqc -n 10
 ```
 
 Similarly, override the configuration in `rebar.config` or the default
 and execute each property for 45 seconds:
 
 ```
-./rebar3 eqc -t 45
+./rebar3 as eqc eqc -t 45
 ```
 
 To only execute the property `prop_test1` in the module `test_module`
 for 1000 iterations use the following:
 
 ```
-./rebar3 eqc -n 1000 -p test_module:prop_test1
+./rebar3 as eqc eqc -n 1000 -p test_module:prop_test1
 ```
 
 To execute the same test, but to have the plugin determine the module
 name use the following:
 
 ```
-./rebar3 eqc -n 1000 -p prop_test1
+./rebar3 as eqc eqc -n 1000 -p prop_test1
 ```
