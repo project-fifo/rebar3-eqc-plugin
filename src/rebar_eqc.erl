@@ -37,17 +37,20 @@ init(State) ->
 
 -spec do(rebar_state:t()) -> {ok, rebar_state:t()} | {error, string()}.
 do(State) ->
+    run_pre_hooks(State),
     setup_name(State),
     rebar_utils:update_code(rebar_state:code_paths(State, all_deps), [soft_purge]),
 
     eqc:start(),
     EqcOpts = resolve_eqc_opts(State),
-    case prepare_tests(State, EqcOpts) of
-        {ok, Tests} ->
-            do_tests(State, EqcOpts, Tests);
-        Error ->
-            Error
-    end.
+    Res = case prepare_tests(State, EqcOpts) of
+              {ok, Tests} ->
+                  do_tests(State, EqcOpts, Tests);
+              Error ->
+                  Error
+          end,
+    run_post_hooks(State, Res),
+    Res.
 
 -spec format_error(any()) -> iolist().
 format_error(unknown_error) ->
@@ -565,5 +568,24 @@ check_epmd({ok, _}) ->
 check_epmd({error, Reason}) ->
     rebar_utils:abort("Erlang Distribution failed: ~p. "
                       "Verify that epmd is running and try again.", [Reason]).
+
+%% Copied from: https://github.com/ferd/rebar3_proper/blob/875d5fd0fe979134102048b34239a2249a86fd80/src/rebar3_proper_prv.erl#L535
+run_pre_hooks(State) ->
+    Providers = rebar_state:providers(State),
+    Cwd = rebar_dir:get_cwd(),
+    rebar_hooks:run_project_and_app_hooks(Cwd, pre, ?PROVIDER, Providers, State).
+
+run_post_hooks(_, {ok, State}) -> run_post_hooks_(State);
+run_post_hooks(State, _) -> run_post_hooks_(State).
+
+run_post_hooks_(State) ->
+    Providers = rebar_state:providers(State),
+    Cwd = rebar_dir:get_cwd(),
+    rebar_hooks:run_project_and_app_hooks(Cwd, post, ?PROVIDER, Providers, State),
+    %% reset code paths for the plugin if we want to handle our own errors
+    %% since the rebar3 hooks drop them by default
+    PluginDepsPaths = lists:usort(rebar_state:code_paths(State, all_plugin_deps)),
+    code:add_pathsa(PluginDepsPaths),
+    ok.
 
 -endif.
